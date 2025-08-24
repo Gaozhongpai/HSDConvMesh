@@ -1,12 +1,34 @@
 
 
-# Learning Spectral Dictionary for Local Representation of Mesh
+# Hierarchical Mesh Representation Learning with Spectral Dictionary Embedding
 ![Results](images/complexity1.png "Results")
-This repository is the official implementation of my paper: "Learning Spectral Dictionary for Local Representation of Mesh"
-# Project Abstract 
-Learning mesh representation is important for many 3D tasks. Conventional convolution for regular data (i.e., images) cannot directly be applied to meshes since each vertex's neighbors are unordered. Previous methods use isotropic filters or predefined local coordinate systems or learning weighting matrices for each template vertex to overcome the irregularity. Learning weighting matrices to resample the vertex's neighbors into an implicit canonical order is the most effective way to capture the local structure of each vertex. However, learning weighting matrices for each vertex increases the model size linearly with the vertex number. Thus, large parameters are required for high-resolution 3D shapes, which is not favorable for many applications. In this paper, we learn spectral dictionary (i.e., bases) for the weighting matrices such that the model size is independent of the resolution of 3D shapes. The coefficients of the weighting matrix bases are learned from the spectral features of the template and its hierarchical levels in a weight-sharing manner. Furthermore, we introduce an adaptive sampling method that learns the hierarchical mapping matrices directly to improve the performance without increasing the model size at the inference stage. Comprehensive experiments demonstrate that our model produces state-of-the-art results with much smaller model size.
 
-[IJCAI link](https://www.ijcai.org/proceedings/2021/95)
+This repository is the official implementation of:
+- **IJCAI 2021**: "Learning Spectral Dictionary for Local Representation of Mesh"
+- **Extension**: "Hierarchical Mesh Representation Learning with Spectral Dictionary Embedding"
+
+## Project Abstract 
+Learning mesh representation is important for many 3D tasks. Conventional convolution for regular data (i.e., images) cannot directly be applied to meshes since each vertex's neighbors are unordered. Previous methods use isotropic filters or predefined local coordinate systems or learning weighting matrices for each template vertex to overcome the irregularity. Learning weighting matrices to resample the vertex's neighbors into an implicit canonical order is the most effective way to capture the local structure of each vertex. However, learning weighting matrices for each vertex increases the model size linearly with the vertex number. Thus, large parameters are required for high-resolution 3D shapes, which is not favorable for many applications. 
+
+We learn spectral dictionary (i.e., bases) for the weighting matrices such that the model size is independent of the resolution of 3D shapes. The coefficients of the weighting matrix bases are learned from the spectral features of the template and its hierarchical levels in a weight-sharing manner. Furthermore, we introduce an adaptive sampling method that learns the hierarchical mapping matrices directly to improve the performance without increasing the model size at the inference stage.
+
+## Key Contributions
+
+### IJCAI 2021 - SDConv
+- **Spectral Dictionary Convolution (SDConv)**: Uses learnable bases for weighting matrices, making model size independent of mesh resolution
+- **Spectral Feature Mapping**: Encodes high-frequency geometric information for better vertex representation
+- **Adaptive Temperature Softmax**: Controls the distribution softness for weighting matrix coefficients
+
+### HSDConv Extensions  
+- **Adaptive Hierarchical Mapping**: Learns dynamic up/downsampling matrices during training (11.04% improvement on DFAUST)
+- **Balanced Spectral Features**: Improved vertex representation combining center vertex and neighbor edge information (3.14% improvement on COMA)  
+- **Extended Applications**: Monocular 3D hand reconstruction on FreiHAND dataset
+- **Latent Feature Manipulation**: Supports interpolation, mixing, and deformation transfer
+
+Comprehensive experiments demonstrate that our models produce state-of-the-art results with much smaller model size.
+
+**Paper Links:**
+- [IJCAI 2021](https://www.ijcai.org/proceedings/2021/95)
 
 ![Pai-Conv](images/pai-gcn.png "Pai-Conv operation")
 
@@ -72,18 +94,36 @@ The following is the organization of the dataset directories expected by the cod
 
 
 
-#### Training and Testing
-Config line 32-36 in pai3DMM.py
+## Model Variants
+
+This codebase supports multiple model configurations:
+
+- **SDConv**: Original spectral dictionary convolution (IJCAI 2021)
+- **HSDConv**: Hierarchical version with adaptive sampling (Journal extension) 
+
+The model name is automatically generated based on your configuration settings.
+
+## Training and Testing
+
+Configure the main parameters in `pai3DMM.py` (lines 32-36):
+
+```python
+root_dir = 'dataset/COMA-dataset'   # 'COMA-dataset', 'DFAUST-dataset', or 'MANO-dataset'
+is_hierarchical = True              # True: HSDConv, False: SDConv  
+is_same_param = 0                   # 0/1/2: different parameter configurations
+is_old_filter = False               # False: updated filter (-x), True: original filter
+mode = 'test'                       # 'train' or 'test'
 ```
-root_dir = 'dataset/COMA-dataset'   ## 'COMA-dataset' or 'DFAUST-dataset' or 'MANO-dataset''
-is_hierarchical = True              ## 'True' or 'False' for learnable up/down sampling
-is_same_param = 0                   ## '0', '1', '2' where '1' for increaes channel and '2' for increase base 
-is_old_filter = False               ## 'False' or 'True' to use different spectral filter
-mode = 'test'                       ## 'test' or 'train' to train or test the models
-```
-```
+
+Run training or testing:
+```bash
 python pai3DMM.py
 ```
+
+### Key Configuration Options:
+- `is_hierarchical=True`: Enables adaptive hierarchical mapping matrices (HSDConv)
+- `is_old_filter=False`: Uses improved spectral filter (recommended)  
+- `base_size`: Controls dictionary size (default 32, affects model size vs accuracy trade-off)
 
 #### Some important notes:
 * The code has compatibility with both _mpi-mesh_ and _trimesh_ packages (it can be chosen by setting the _meshpackage_ variable pai3DMM.py).
@@ -95,11 +135,12 @@ python pai3DMM.py
 
 The structure of this codebase is borrowed from [Neural3DMM](https://github.com/gbouritsas/Neural3DMM).
 
-# Cite
+# Citation
 
 Please consider citing our work if you find it useful:
 
-```
+**For the original method (IJCAI 2021):**
+```bibtex
 @inproceedings{ijcai2021-95,
   title     = {Learning Spectral Dictionary for Local Representation of Mesh},
   author    = {Gao, Zhongpai and Yan, Junchi and Zhai, Guangtao and Yang, Xiaokang},
@@ -110,7 +151,7 @@ Please consider citing our work if you find it useful:
   pages     = {685--692},
   year      = {2021},
   month     = {8},
-  note      = {Main Track}
+  note      = {Main Track},
   doi       = {10.24963/ijcai.2021/95},
   url       = {https://doi.org/10.24963/ijcai.2021/95},
 }
