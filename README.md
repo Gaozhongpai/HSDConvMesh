@@ -103,7 +103,11 @@ This codebase supports multiple model configurations:
 
 The model name is automatically generated based on your configuration settings.
 
-## Training and Testing
+## Quick Start
+
+For detailed usage instructions and configuration options, see **[USAGE.md](USAGE.md)**.
+
+### Basic Usage
 
 Configure the main parameters in `pai3DMM.py` (lines 32-36):
 
@@ -124,6 +128,8 @@ python pai3DMM.py
 - `is_hierarchical=True`: Enables adaptive hierarchical mapping matrices (HSDConv)
 - `is_old_filter=False`: Uses improved spectral filter (recommended)  
 - `base_size`: Controls dictionary size (default 32, affects model size vs accuracy trade-off)
+
+📖 **For comprehensive usage instructions, model variants, and advanced configuration options, see [USAGE.md](USAGE.md)**
 
 #### Some important notes:
 * The code has compatibility with both _mpi-mesh_ and _trimesh_ packages (it can be chosen by setting the _meshpackage_ variable pai3DMM.py).
