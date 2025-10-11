@@ -9,10 +9,10 @@ import trimesh
 import scipy.sparse as sp
 from typing import Tuple, List
 
-from shape_data import ShapeData
-from utils import get_adj, sparse_mx_to_torch_sparse_tensor
-from device import device
-import mesh_sampling
+from src.data.shape_data import ShapeData
+from src.utils.helpers import get_adj, sparse_mx_to_torch_sparse_tensor
+from src.utils.device import device
+import src.data.mesh_sampling as mesh_sampling
 
 
 def setup_directories(config) -> dict:

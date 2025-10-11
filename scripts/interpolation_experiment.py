@@ -10,12 +10,12 @@ from typing import List, Tuple
 import numpy as np
 import torch
 
-from autoencoder_dataset import autoencoder_dataset
+from src.data.dataset import autoencoder_dataset
 from config import Config
-from device import device
+from src.utils.device import device
 from main import create_model
-from setup_utils import (load_or_generate_matrices, load_shape_data,
-                         setup_directories)
+from src.utils.setup import (load_or_generate_matrices, load_shape_data,
+                              setup_directories)
 
 
 def _prepare_config(root_dir_override: str | None) -> Config:
@@ -61,14 +61,12 @@ def _ensure_dir(path: str) -> None:
 
 
 def _select_pairs(dataset_len: int, num_pairs: int, rng: random.Random) -> List[Tuple[int, int]]:
+    """Select random pairs of indices from dataset for interpolation."""
     if num_pairs * 2 > dataset_len:
         raise ValueError('Requested more pairs than available unique samples')
     indices = list(range(dataset_len))
     rng.shuffle(indices)
-    pairs = []
-    for i in range(num_pairs):
-        pairs.append((indices[2 * i], indices[2 * i + 1]))
-    return pairs
+    return [(indices[2 * i], indices[2 * i + 1]) for i in range(num_pairs)]
 
 
 def _to_tensor(data, *, target_device) -> torch.Tensor:

@@ -33,15 +33,33 @@ Comprehensive experiments demonstrate that our models produce state-of-the-art r
 ![Pai-Conv](images/pai-gcn.png "Pai-Conv operation")
 
 
+# Repository Structure
+
+The codebase is organized following standard Python project structure:
+
+```
+/code/
+├── main.py                    # Main entry point
+├── config.py                  # Configuration management
+├── src/                       # Source code
+│   ├── models/               # Model architectures (PaiAutoencoder, convolutions, pooling)
+│   ├── data/                 # Data loading and processing
+│   ├── training/             # Training and testing functions
+│   └── utils/                # Utilities and helpers
+├── scripts/                   # Standalone scripts (interpolation, etc.)
+├── tools/                     # Visualization tools
+└── experiments/               # Experimental code and ablations
+```
+
 # Repository Requirements
 
-This code was written in Pytorch 1.4. We use tensorboardX for the visualisation of the training metrics. We recommend setting up a virtual environment using [Miniconda](https://docs.conda.io/en/latest/miniconda.html). To install Pytorch in a conda environment, simply run 
+This code was written in Pytorch 1.4. We use tensorboardX for the visualisation of the training metrics. We recommend setting up a virtual environment using [Miniconda](https://docs.conda.io/en/latest/miniconda.html). To install Pytorch in a conda environment, simply run
 
 ```
 $ conda install pytorch torchvision -c pytorch
 ```
 
-Then the rest of the requirements can be installed with 
+Then the rest of the requirements can be installed with
 
 ```
 $ pip install -r requirements.txt
@@ -59,7 +77,7 @@ Here are the trained models and logs on Google Drive [DFAUST-Models.zip](https:/
 In order to use a pytorch dataloader for training and testing, we split the data into seperate files by:
 
 ```
-$ python data_generation.py --root_dir=/path/to/data_root_dir --dataset=DFAUST --num_valid=100
+$ python src/data/preprocessing.py --root_dir=/path/to/data_root_dir --dataset=DFAUST --num_valid=100
 ```
 
 The following is the organization of the dataset directories expected by the code:
@@ -109,19 +127,19 @@ For detailed usage instructions and configuration options, see **[USAGE.md](USAG
 
 ### Basic Usage
 
-Configure the main parameters in `pai3DMM.py` (lines 32-36):
+Configure the main parameters in `config.py`:
 
 ```python
 root_dir = 'dataset/COMA-dataset'   # 'COMA-dataset', 'DFAUST-dataset', or 'MANO-dataset'
-is_hierarchical = True              # True: HSDConv, False: SDConv  
-is_same_param = 0                   # 0/1/2: different parameter configurations
+is_hierarchical = True              # True: HSDConv, False: SDConv
+is_same_param = False               # Parameter configuration variant
 is_old_filter = False               # False: updated filter (-x), True: original filter
-mode = 'test'                       # 'train' or 'test'
+mode = 'train'                      # 'train' or 'test'
 ```
 
 Run training or testing:
 ```bash
-python pai3DMM.py
+python main.py
 ```
 
 ### Key Configuration Options:
@@ -132,7 +150,7 @@ python pai3DMM.py
 📖 **For comprehensive usage instructions, model variants, and advanced configuration options, see [USAGE.md](USAGE.md)**
 
 #### Some important notes:
-* The code has compatibility with both _mpi-mesh_ and _trimesh_ packages (it can be chosen by setting the _meshpackage_ variable pai3DMM.py).
+* The code has compatibility with both _mpi-mesh_ and _trimesh_ packages (it can be chosen by setting the _meshpackage_ variable in config.py).
 
 
 

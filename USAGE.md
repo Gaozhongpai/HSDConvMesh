@@ -2,38 +2,32 @@
 
 ## Overview
 
-This repository provides multiple ways to run the spectral dictionary mesh autoencoder:
+This repository uses a modular approach for running the spectral dictionary mesh autoencoder.
 
-## 1. Quick Start (Backwards Compatible)
+## 1. Quick Start
 
-For existing users, the original `pai3DMM.py` script still works but is now much cleaner:
-
-```bash
-python pai3DMM.py
-```
-
-Configure by editing the parameters at the top of `pai3DMM.py` (lines 34-39):
-
-```python
-root_dir = 'dataset/COMA-dataset'   # Dataset path
-is_hierarchical = True              # True: HSDConv, False: SDConv
-is_same_param = False               # Parameter configuration variant
-is_old_filter = False               # False: updated filter (-x), True: original
-mode = 'test'                       # 'train' or 'test'
-```
-
-## 2. Recommended (New Projects)
-
-For new projects, use the modular approach with configuration files:
+Run the main script:
 
 ```bash
 python main.py
 ```
 
 This uses:
-- `config.py` - Clean configuration management with dataclasses
+- `config.py` - Configuration management with dataclasses
 - `setup_utils.py` - Utility functions for setup and data loading
-- `main.py` - Clean main execution script
+- `main.py` - Main execution script
+
+## 2. Configuration
+
+Edit `config.py` to set your parameters:
+
+```python
+root_dir = 'dataset/COMA-dataset'   # Dataset path
+is_hierarchical = True              # True: HSDConv, False: SDConv
+is_same_param = False               # Parameter configuration variant
+is_old_filter = False               # False: updated filter (-x), True: original
+mode = 'train'                      # 'train' or 'test'
+```
 
 ## 3. Configuration Options
 
@@ -73,15 +67,21 @@ dataset/[DATASET]/results/[MODEL_NAME]/latent_[SIZE]/
 
 ## 6. Training vs Testing
 
+Set the `mode` parameter in `config.py`:
+
 **Training:**
 ```python
 mode = 'train'
 ```
 
+Then run: `python main.py`
+
 **Testing:**
 ```python
 mode = 'test'
 ```
+
+Then run: `python main.py`
 
 ## 7. Performance Tips
 

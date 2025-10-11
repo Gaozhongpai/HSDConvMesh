@@ -11,15 +11,15 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 
 from config import Config
-from setup_utils import (setup_directories, load_shape_data, load_or_generate_matrices, 
-                        create_optimizer, create_loss_function)
-from autoencoder_dataset import autoencoder_dataset
-from models import PaiAutoencoder
-# from pointtransformerv3 import PointTransformerV3Autoencoder
-from train_funcs import train_autoencoder_dataloader
-from test_funcs import test_autoencoder_dataloader
-from utils import IOStream
-from device import device
+from src.utils.setup import (setup_directories, load_shape_data, load_or_generate_matrices,
+                              create_optimizer, create_loss_function)
+from src.data.dataset import autoencoder_dataset
+from src.models.models import PaiAutoencoder
+# from src.models.pointtransformerv3 import PointTransformerV3Autoencoder
+from src.training.train import train_autoencoder_dataloader
+from src.training.test import test_autoencoder_dataloader
+from src.utils.helpers import IOStream
+from src.utils.device import device
 
 
 def create_dataloaders(config, shapedata):
