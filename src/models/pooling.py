@@ -6,7 +6,7 @@ import math
 
 from math import ceil, sqrt
 import pdb
-from device import device
+from src.utils.device import device
 
 
 class AttPool(nn.Module):
