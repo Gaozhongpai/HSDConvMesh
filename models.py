@@ -12,6 +12,169 @@ from math import ceil, sqrt
 from device import device
 import numpy as np
 
+
+class FeaStConv(nn.Module): ## FeaStConv
+    def __init__(self, num_pts, in_c, num_neighbor, out_c,activation='relu',bias=True): # ,device=None):
+        super(FeaStConv,self).__init__()
+        self.in_c = in_c
+        self.out_c = out_c
+        self.heads = num_neighbor
+        self.bias = nn.Parameter(torch.Tensor(out_c))
+        self.mlp = nn.Linear(in_c, self.heads) 
+        self.mlp_out = nn.Linear(in_c, self.heads * out_c, bias=False)
+        self.softmax = nn.Softmax(dim=1)
+        self.zero_padding = torch.ones((1, num_pts, 1))
+        self.zero_padding[0,-1,0] = 0.0
+
+        self.reset_parameters()
+
+        if activation == 'relu':
+            self.activation = nn.ReLU()
+        elif activation == 'elu':
+            self.activation = nn.ELU()
+        elif activation == 'identity':
+            self.activation = lambda x: x
+        else:
+            raise NotImplementedError()
+    
+    @staticmethod
+    def normal(tensor, mean, std):
+        if tensor is not None:
+            tensor.data.normal_(mean, std)
+
+    def reset_parameters(self):
+        self.normal(self.bias, mean=0, std=0.1)
+
+    def forward(self,x,t_vertex,neighbor_index):
+        bsize, num_pts, feats = x.size()
+        _, _, num_neighbor = neighbor_index.size()
+        
+        neighbor_index = neighbor_index.view(bsize*num_pts*num_neighbor) # [1d array of batch,vertx,vertx-adj]
+        batch_index = torch.arange(bsize, device=x.device).view(-1,1).repeat([1,num_pts*num_neighbor]).view(-1).long() 
+        x_neighbors = x[batch_index,neighbor_index,:].view(bsize*num_pts, num_neighbor, feats)
+        #### relative position ####
+        x_relative = x_neighbors - x_neighbors[:, 0:1, :]
+
+        q = self.softmax(self.mlp(x_relative.view(-1, feats))).view(bsize, num_pts, num_neighbor*self.heads, -1)
+        x_j = self.mlp_out(x_neighbors.view(-1, feats)).view(bsize, num_pts, num_neighbor*self.heads, -1)
+        out_feat =  (x_j * q).sum(dim=2) + self.bias
+        out_feat = out_feat * self.zero_padding.to(out_feat.device)
+        return self.activation(out_feat)
+
+
+class AdaptiveConv(nn.Module):
+    """AdaptiveConv block from AdaptConv (Zhang et al., CVPR 2021)."""
+
+    def __init__(self, in_channels, out_channels, feat_channels):
+        super(AdaptiveConv, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.feat_channels = feat_channels
+
+        self.conv0 = nn.Conv2d(feat_channels, out_channels, kernel_size=1, bias=False)
+        self.conv1 = nn.Conv2d(out_channels, out_channels * in_channels, kernel_size=1, bias=False)
+        self.bn0 = nn.BatchNorm2d(out_channels)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+
+    def forward(self, x, y):
+        """Apply adaptive convolution.
+
+        Args:
+            x: Tensor of shape (batch, in_channels, num_points, k).
+            y: Tensor of shape (batch, feat_channels, num_points, k).
+        """
+
+        batch_size, _, num_points, k = x.size()
+
+        y = self.conv0(y)
+        y = self.leaky_relu(self.bn0(y))
+        y = self.conv1(y)
+        y = y.permute(0, 2, 3, 1).view(batch_size, num_points, k, self.out_channels, self.in_channels)
+
+        x = x.permute(0, 2, 3, 1).unsqueeze(4)
+        x = torch.matmul(y, x).squeeze(4)
+        x = x.permute(0, 3, 1, 2).contiguous()
+
+        x = self.bn1(x)
+        x = self.leaky_relu(x)
+
+        return x
+
+
+class AdaptiveConvBlock(nn.Module):
+    """Wrapper that adapts AdaptiveConv to the mesh autoencoder interface."""
+
+    def __init__(self, num_pts, in_c, num_neighbor, out_c, activation='elu'):
+        super().__init__()
+        self.in_c = in_c
+        self.out_c = out_c
+        self.num_neighbor = num_neighbor
+
+        self.adaptive_conv = AdaptiveConv(in_channels=6, out_channels=out_c, feat_channels=2 * in_c)
+        self.mlp_out = nn.Linear(in_c, out_c)
+        self.zero_padding = torch.ones((1, num_pts, 1))
+        self.zero_padding[0, -1, 0] = 0.0
+
+        if activation == 'relu':
+            self.activation = nn.ReLU()
+        elif activation == 'elu':
+            self.activation = nn.ELU()
+        elif activation == 'identity':
+            self.activation = lambda x: x
+        else:
+            raise NotImplementedError()
+
+    def forward(self, x, t_vertex, neighbor_index):
+        bsize, num_pts, feats = x.size()
+        num_neighbor = min(self.num_neighbor, neighbor_index.size(2))
+
+        x = x * self.zero_padding.to(x.device)
+
+        neighbor_index = neighbor_index[:, :, :num_neighbor].contiguous()
+        flat_neighbors = neighbor_index.view(bsize * num_pts * num_neighbor).long()
+        batch_index = torch.arange(bsize, device=x.device).view(-1, 1).repeat(1, num_pts * num_neighbor).view(-1)
+
+        x_neighbors = x[batch_index, flat_neighbors, :].view(bsize, num_pts, num_neighbor, feats)
+        center_feat = x.unsqueeze(2).expand(-1, -1, num_neighbor, -1)
+        feat_input = torch.cat((x_neighbors - center_feat, center_feat), dim=-1)
+        feat_input = feat_input.permute(0, 3, 1, 2).contiguous()
+
+        pos = t_vertex
+        if pos.dim() == 2:
+            pos = pos.unsqueeze(0)
+        if pos.size(0) == 1 and pos.size(0) != bsize:
+            pos = pos.expand(bsize, -1, -1)
+        if pos.size(0) != bsize:
+            raise ValueError(f"AdaptiveConvBlock expected position batch {bsize}, got {pos.size(0)}")
+        pos = pos.to(x.device)
+        pos_dim = pos.size(-1)
+        if pos_dim < 3:
+            pad = torch.zeros(bsize, pos.size(1), 3 - pos_dim, device=pos.device, dtype=pos.dtype)
+            pos = torch.cat([pos, pad], dim=-1)
+        pos = pos[..., :3].clone()
+        if pos.size(1) < num_pts:
+            pad = torch.zeros(bsize, num_pts - pos.size(1), 3, device=pos.device, dtype=pos.dtype)
+            pos = torch.cat([pos, pad], dim=1)
+        elif pos.size(1) > num_pts:
+            pos = pos[:, :num_pts, :]
+        pos[:, -1, :] = 0
+
+        pos_neighbors = pos[batch_index, flat_neighbors, :].view(bsize, num_pts, num_neighbor, 3)
+        center_pos = pos.unsqueeze(2).expand(-1, -1, num_neighbor, -1)
+        pos_input = torch.cat((pos_neighbors - center_pos, center_pos), dim=-1)
+        pos_input = pos_input.permute(0, 3, 1, 2).contiguous()
+
+        out = self.adaptive_conv(pos_input, feat_input)
+        out = out.max(dim=-1, keepdim=False)[0]
+        out = out.permute(0, 2, 1).contiguous()
+
+        res = self.mlp_out(x.view(-1, self.in_c)).view(bsize, num_pts, self.out_c)
+        out = out + res
+        out = out * self.zero_padding.to(out.device)
+        return self.activation(out)
+
+
 class PaiConv(nn.Module): ## LSA-Conv
     '''
     Gao, Zhongpai, et al. "Learning local neighboring structure for robust 3D shape representation." 
@@ -125,7 +288,8 @@ class PaiConvTiny(nn.Module): ## SDConv or HSDConv
 class PaiAutoencoder(nn.Module):
     def __init__(self, filters_enc, filters_dec, latent_size, 
                  t_vertices, sizes, num_neighbors, x_neighbors, D, U, activation = 'elu', 
-                 is_hierarchical=True, is_old_filter=False, base_size=32):
+                 is_hierarchical=True, is_old_filter=False, base_size=32, use_feast_ablation=False,
+                 use_adaptive_ablation=False):
         super(PaiAutoencoder, self).__init__()
         self.latent_size = latent_size
         self.sizes = sizes
@@ -140,6 +304,11 @@ class PaiAutoencoder(nn.Module):
         self.U = nn.ParameterList(self.U)
         self.is_hierarchical = is_hierarchical
         self.is_old_filter = is_old_filter
+        self.use_feast_ablation = use_feast_ablation
+        self.base_size = base_size
+        self.use_adaptive_ablation = use_adaptive_ablation
+        if self.use_adaptive_ablation and self.use_feast_ablation:
+            raise ValueError('AdaptiveConv and FeaSt ablations cannot both be enabled')
 
         mappingsize = 64
         self.o_vertices = t_vertices
@@ -168,9 +337,15 @@ class PaiAutoencoder(nn.Module):
         self.activation = activation
         self.conv = []
         input_size = filters_enc[0]
+        def make_conv_layer(num_pts, in_c, num_neighbor, out_c, act):
+            if self.use_adaptive_ablation:
+                return AdaptiveConvBlock(num_pts, in_c, num_neighbor, out_c, activation=act)
+            if (not self.is_hierarchical) and self.use_feast_ablation:
+                return FeaStConv(num_pts, in_c, num_neighbor, out_c, activation=act)
+            return PaiConvTiny(num_pts, in_c, num_neighbor, out_c, activation=act, base_size=self.base_size)
         for i in range(len(num_neighbors)-1):
-            self.conv.append(PaiConvTiny(self.x_neighbors[i].shape[0], input_size, num_neighbors[i], filters_enc[i+1],
-                                        activation=self.activation, base_size=base_size))
+            self.conv.append(make_conv_layer(self.x_neighbors[i].shape[0], input_size, num_neighbors[i], filters_enc[i+1],
+                                             self.activation))
             input_size = filters_enc[i+1]
 
         self.conv = nn.ModuleList(self.conv)   
@@ -181,14 +356,14 @@ class PaiAutoencoder(nn.Module):
         self.dconv = []
         input_size = filters_dec[0]
         for i in range(len(num_neighbors)-1):
-            self.dconv.append(PaiConvTiny(self.x_neighbors[-2-i].shape[0], input_size, num_neighbors[-2-i], filters_dec[i+1],
-                                            activation=self.activation, base_size=base_size))
+            self.dconv.append(make_conv_layer(self.x_neighbors[-2-i].shape[0], input_size, num_neighbors[-2-i], filters_dec[i+1],
+                                              self.activation))
             input_size = filters_dec[i+1]  
 
             if i == len(num_neighbors)-2:
                 input_size = filters_dec[-2]
-                self.dconv.append(PaiConvTiny(self.x_neighbors[-2-i].shape[0], input_size, num_neighbors[-2-i], filters_dec[-1],
-                                                activation='identity', base_size=base_size))
+                self.dconv.append(make_conv_layer(self.x_neighbors[-2-i].shape[0], input_size, num_neighbors[-2-i], filters_dec[-1],
+                                                   'identity'))
                     
         self.dconv = nn.ModuleList(self.dconv)
 
@@ -240,7 +415,8 @@ class PaiAutoencoder(nn.Module):
         D = self.D
         t_vertices = self.t_vertices
         for i in range(len(self.num_neighbors)-1):
-            x = self.conv[i](x, t_vertices[i], S[i].repeat(bsize,1,1))
+            t_arg = self.o_vertices[i] if self.use_adaptive_ablation else t_vertices[i]
+            x = self.conv[i](x, t_arg, S[i].repeat(bsize,1,1))
             # x = torch.matmul(D[i],x)
             x = self.poolwT(x, D[i]) if not self.is_hierarchical else self.attpoolenc[i](x) #, t_vertices[i], t_vertices[i+1]) #, t_vertices[i+1])
             # self.t_vertices[i+1] = self.attpoolenc[i](self.t_vertices[i][None]).squeeze().detach() #, t_vertices[i])#, t_vertices[i+1])
@@ -266,8 +442,10 @@ class PaiAutoencoder(nn.Module):
         for i in range(len(self.num_neighbors)-1):
             # x = torch.matmul(U[-1-i],x)
             x = self.poolwT(x, U[-1-i]) if not self.is_hierarchical else self.attpooldec[-i-1](x) #, t_vertices[-i-1], t_vertices[-i-2]) #, t_vertices[-i-2])
-            x = self.dconv[i](x, t_vertices[-2-i], S[-2-i].repeat(bsize,1,1))
-        x = self.dconv[-1](x, t_vertices[0], S[0].repeat(bsize,1,1))
+            t_arg = self.o_vertices[-2-i] if self.use_adaptive_ablation else t_vertices[-2-i]
+            x = self.dconv[i](x, t_arg, S[-2-i].repeat(bsize,1,1))
+        final_t = self.o_vertices[0] if self.use_adaptive_ablation else t_vertices[0]
+        x = self.dconv[-1](x, final_t, S[0].repeat(bsize,1,1))
         return x
 
     def update(self):
@@ -293,7 +471,7 @@ class PaiAutoencoder(nn.Module):
 
     def forward(self,x):
         bsize = x.size(0)
-        # alpha = torch.linspace(0, 1, steps=5).cuda().unsqueeze(1)
+        # alpha = torch.linspace(0, 1, steps=10).cuda().unsqueeze(1)
         if self.is_hierarchical:
             self.update()
         z = self.encode(x)

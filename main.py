@@ -15,6 +15,7 @@ from setup_utils import (setup_directories, load_shape_data, load_or_generate_ma
                         create_optimizer, create_loss_function)
 from autoencoder_dataset import autoencoder_dataset
 from models import PaiAutoencoder
+# from pointtransformerv3 import PointTransformerV3Autoencoder
 from train_funcs import train_autoencoder_dataloader
 from test_funcs import test_autoencoder_dataloader
 from utils import IOStream
@@ -68,19 +69,28 @@ def create_dataloaders(config, shapedata):
 
 def create_model(config, vertices, Adj, tD, tU, sizes):
     """Create the autoencoder model."""
-    model = PaiAutoencoder(
-        filters_enc=config.filter_sizes_enc,
-        filters_dec=config.filter_sizes_dec,
-        latent_size=config.nz,
-        sizes=sizes,
-        t_vertices=vertices,
-        num_neighbors=config.kernal_size,
-        x_neighbors=Adj,
-        D=tD, U=tU,
-        is_hierarchical=config.is_hierarchical,
-        is_old_filter=config.is_old_filter,
-        base_size=config.base_size
-    ).to(device)
+    if config.use_point_transformer:
+        model = PointTransformerV3Autoencoder(
+            latent_size=config.nz,
+            grid_size=config.point_transformer_grid_size,
+            point_transformer_kwargs=config.point_transformer_kwargs
+        ).to(device)
+    else:
+        model = PaiAutoencoder(
+            filters_enc=config.filter_sizes_enc,
+            filters_dec=config.filter_sizes_dec,
+            latent_size=config.nz,
+            sizes=sizes,
+            t_vertices=vertices,
+            num_neighbors=config.kernal_size,
+            x_neighbors=Adj,
+            D=tD, U=tU,
+            is_hierarchical=config.is_hierarchical,
+            is_old_filter=config.is_old_filter,
+            base_size=config.base_size,
+            use_feast_ablation=config.use_feast_ablation,
+            use_adaptive_ablation=config.use_adaptive_ablation
+        ).to(device)
     
     return model
 

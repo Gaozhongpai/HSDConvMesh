@@ -3,7 +3,7 @@ Configuration settings for spectral dictionary mesh learning.
 """
 import os
 from dataclasses import dataclass, field
-from typing import List, Literal
+from typing import List, Literal, Dict as TypingDict, Any
 
 
 @dataclass
@@ -26,6 +26,11 @@ class Config:
     filter_sizes_enc: List[int] = field(default_factory=lambda: [3, 16, 32, 64, 128])
     filter_sizes_dec: List[int] = field(default_factory=lambda: [128, 64, 32, 32, 16, 3])
     base_size: int = 32
+    use_feast_ablation: bool = False  # Replace SDConv blocks with FeaStConv when False hierarchy
+    use_adaptive_ablation: bool = False  # Replace SDConv blocks with AdaptiveConv
+    use_point_transformer: bool = False  # Swap to PointTransformerV3-based autoencoder
+    point_transformer_grid_size: float = 0.05
+    point_transformer_kwargs: TypingDict[str, Any] = field(default_factory=dict)
     
     # Training parameters
     batch_size: int = 32
@@ -60,6 +65,22 @@ class Config:
             self.generative_model = 'H' + self.generative_model
         if self.is_same_param:
             self.generative_model += '-param'
+        ablation_flags = 0
+        if self.use_feast_ablation and not self.is_hierarchical:
+            ablation_flags += 1
+        if self.use_adaptive_ablation:
+            ablation_flags += 1
+        if self.use_point_transformer:
+            ablation_flags += 1
+        if ablation_flags > 1:
+            raise ValueError('Only one ablation (FeaStConv, AdaptiveConv, PointTransformer) can be enabled at a time')
+
+        if self.use_feast_ablation and not self.is_hierarchical:
+            self.generative_model += '-feast'
+        if self.use_adaptive_ablation:
+            self.generative_model += '-adapt'
+        if self.use_point_transformer:
+            self.generative_model += '-ptv3'
         
         # Adjust filter sizes for specific datasets if using same_param
         if self.is_same_param:
