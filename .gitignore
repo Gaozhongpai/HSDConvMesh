@@ -6,3 +6,5 @@ meshes
 *pdf
 dataset
 CLAUDE.md
+.claude 
+__pycache__

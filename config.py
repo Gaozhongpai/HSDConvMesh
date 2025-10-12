@@ -9,7 +9,7 @@ from typing import List, Literal, Dict as TypingDict, Any
 @dataclass
 class Config:
     # Dataset and model configuration
-    root_dir: str = 'dataset/COMA-dataset'  # 'COMA-dataset', 'DFAUST-dataset', or 'MANO-dataset'
+    root_dir: str = 'dataset/DFAUST-dataset'  # 'COMA-dataset', 'DFAUST-dataset', or 'MANO-dataset'
     is_hierarchical: bool = True  # True: HSDConv, False: SDConv
     is_same_param: bool = False  # Parameter configuration variant
     is_old_filter: bool = False  # False: updated filter (-x), True: original filter

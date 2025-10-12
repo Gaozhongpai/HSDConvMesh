@@ -85,9 +85,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root-dir', type=str, default=None,
                         help='Override dataset root directory from config.py')
-    parser.add_argument('--num-pairs', type=int, default=10,
+    parser.add_argument('--num-pairs', type=int, default=100,
                         help='Number of random interpolation pairs to evaluate')
-    parser.add_argument('--num-steps', type=int, default=10,
+    parser.add_argument('--num-steps', type=int, default=5,
                         help='Number of interpolation samples (including endpoints)')
     parser.add_argument('--seed', type=int, default=2,
                         help='Random seed for pair sampling')
@@ -166,10 +166,13 @@ def main() -> None:
                     norm_path = os.path.join(pair_dir, f'interp_step_{step_idx:02d}_norm.tch')
                     torch.save(decoded_full_norm[step_idx].cpu(), norm_path)
 
-            diffs = decoded_denorm[1:] - decoded_denorm[:-1]
-            disp = torch.sqrt((diffs ** 2).sum(dim=2)) * args.mm_constant
-            mean_disp = disp.mean(dim=1)
-            displacement_records.append(mean_disp.cpu())
+            # Compute error from each interpolation step to target sample_b
+            # For num_steps=5: [sample_a, step1, step2, step3, sample_b]
+            # We want error of [sample_a, step1, step2, step3] to sample_b
+            target_b_denorm = decoded_denorm[-1:].expand_as(decoded_denorm[:-1])
+            errors_to_b = torch.sqrt(((decoded_denorm[:-1] - target_b_denorm) ** 2).sum(dim=2)) * args.mm_constant
+            mean_errors_to_b = errors_to_b.mean(dim=1)  # Average over vertices
+            displacement_records.append(mean_errors_to_b.cpu())
 
             recon_norm_full = model(decoded_full_norm)
             recon_norm = recon_norm_full[:, :-1, :]
@@ -184,7 +187,7 @@ def main() -> None:
                 'pair_index': pair_idx,
                 'sample_indices': [int(idx_a), int(idx_b)],
                 'sample_paths': [str(dataset_test.paths[idx_a]), str(dataset_test.paths[idx_b])],
-                'per_step_mean_displacement_mm': mean_disp.cpu().tolist(),
+                'per_step_error_to_target_b_mm': mean_errors_to_b.cpu().tolist(),
                 'per_mesh_self_recon_mm': mean_self.cpu().tolist(),
             }
             pair_summaries.append(pair_summary)
@@ -198,12 +201,10 @@ def main() -> None:
         'seed': args.seed,
         'mm_constant': args.mm_constant,
         'root_dir': config.root_dir,
-        'avg_step_displacement_mm': disp_tensor.mean().item(),
-        'std_step_displacement_mm': disp_tensor.flatten().std(unbiased=False).item(),
+        'per_step_error_to_target_b_mm': disp_tensor.mean(dim=0).tolist(),
+        'per_step_error_to_target_b_std_mm': disp_tensor.std(dim=0, unbiased=False).tolist(),
         'avg_self_recon_error_mm': self_tensor.mean().item(),
         'std_self_recon_error_mm': self_tensor.flatten().std(unbiased=False).item(),
-        'per_step_mean_displacement_mm': disp_tensor.mean(dim=0).tolist(),
-        'per_step_displacement_std_mm': disp_tensor.std(dim=0, unbiased=False).tolist(),
         'per_mesh_self_recon_mm': self_tensor.mean(dim=0).tolist(),
         'per_mesh_self_recon_std_mm': self_tensor.std(dim=0, unbiased=False).tolist(),
     }
@@ -215,7 +216,7 @@ def main() -> None:
 
     print(f'Saved interpolation meshes under: {output_root}')
     print(f'Metrics written to: {summary_path}')
-    print('Average per-step displacement (mm):', metrics['avg_step_displacement_mm'])
+    print('Per-step error to target B (mm):', metrics['per_step_error_to_target_b_mm'])
     print('Average self-reconstruction error (mm):', metrics['avg_self_recon_error_mm'])
 
 
